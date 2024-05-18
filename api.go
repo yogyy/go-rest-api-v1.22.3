@@ -1,41 +1,90 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+
 	"log"
 	"net/http"
 )
 
-type APIService struct {
-	addr string
+func WriteJSON(w http.ResponseWriter, status int, v any) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(v)
 }
 
-func NewAPIServer(addr string) *APIService {
-	return &APIService{
-		addr: addr,
+type apiFunc func(w http.ResponseWriter, r *http.Request) error
+
+type apiError struct {
+	Error string
+}
+
+func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := f(w, r); err != nil {
+			WriteJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		}
 	}
+}
+
+type APIService struct {
+	addr  string
+	store Storage
+}
+
+func NewAPIServer(addr string, store Storage) *APIService {
+	return &APIService{
+		addr:  addr,
+		store: store,
+	}
+}
+
+func (s *APIService) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
+	req := new(CreateAccountRequest)
+
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		return err
+	}
+
+	account := NewAccount(req.FirstName, req.LastName)
+	if err := s.store.CreateAccount(account); err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, account)
+}
+
+func (s *APIService) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
+	accounts, err := s.store.GetAccounts()
+	if err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, accounts)
+}
+
+func (s *APIService) handleGetAccountByID(w http.ResponseWriter, r *http.Request) error {
+	// id := r.PathValue("id")
+	message := map[string]string{"id": r.PathValue("id")}
+	return WriteJSON(w, http.StatusOK, message)
 }
 
 func (s *APIService) Run() error {
 	router := http.NewServeMux()
-	router.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(([]byte("wsupp")))
-	})
-	router.HandleFunc("/hello/{name}", func(w http.ResponseWriter, r *http.Request) {
-		message := fmt.Sprintf("wsup %s", r.PathValue("name"))
 
-		w.Write([]byte(message))
-	})
+	router.HandleFunc("GET /account", makeHTTPHandleFunc(s.handleGetAccount))
+	router.HandleFunc("GET /account/{id}", makeHTTPHandleFunc(s.handleGetAccountByID))
+	router.HandleFunc("POST /account", makeHTTPHandleFunc(s.handleCreateAccount))
 
 	v1 := http.NewServeMux()
 	v1.Handle("/api/v1/", http.StripPrefix("/api/v1", router))
 
 	server := http.Server{
 		Addr:    s.addr,
-		Handler: RequireAuthMiddleware(ReqLoggerMiddleware(v1)),
+		Handler: ReqLoggerMiddleware(v1),
 	}
 
-	log.Printf("Server has started %s", s.addr)
+	log.Printf("Server has started http://%s", s.addr)
 
 	return server.ListenAndServe()
 }

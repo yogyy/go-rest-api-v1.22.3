@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-
 	"log"
 	"net/http"
 )
@@ -35,10 +34,12 @@ func (s *APIService) Run() error {
 
 	router.HandleFunc("GET /account", makeHTTPHandleFunc(s.handleGetAccount))
 	router.HandleFunc("GET /account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID), s.store))
-	router.HandleFunc("POST /account", makeHTTPHandleFunc(s.handleCreateAccount))
 	router.HandleFunc("DELETE /account/{id}", makeHTTPHandleFunc(s.handleDeleteAccount))
 
 	router.HandleFunc("POST /transfer", makeHTTPHandleFunc(s.handleTransfer))
+
+	router.HandleFunc("POST /auth/register", makeHTTPHandleFunc(s.handleSignUp))
+	router.HandleFunc("POST /auth/login", makeHTTPHandleFunc(s.handleLogin))
 
 	v1 := http.NewServeMux()
 	v1.Handle("/api/v1/", http.StripPrefix("/api/v1", router))

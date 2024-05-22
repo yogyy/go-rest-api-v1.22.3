@@ -106,11 +106,6 @@ func withJWTAuth(handlerFunc http.HandlerFunc, s Storage) http.HandlerFunc {
 			return
 		}
 
-		if err != nil {
-			permissionDenied(w)
-			return
-		}
-
 		handlerFunc(w, r)
 	}
 }
@@ -130,7 +125,7 @@ func validateJWT(tokenString string) (*jwt.Token, error) {
 
 	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
 		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
